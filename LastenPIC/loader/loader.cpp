@@ -40,8 +40,8 @@ cleanup:
 void 
 args( PWSTR* pServer, PDWORD pdwPort, PWSTR* pPath, PWSTR* pProxy, PWSTR* pProxyUser, PWSTR* pProxyPassword, int argc, wchar_t **argv ){
 
-    if (argc < 4)
-        help(argv);
+    // if (argc < 4)
+    //     help(argv);
 
     for (int i = 1; i < argc; i++) {
 

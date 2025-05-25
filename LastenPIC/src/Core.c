@@ -1,40 +1,68 @@
 #include "Core.h"
 
-DWORD inLoop(LastenPIC * pLastenPIC) {
+#define RECONNECT_RETRY_COUNT 10
+#define RECONNECT_RETRY_DELAY_MS 30000  // 30 seconds
 
-	DWORD dwSuccess = FAIL, dwLenFrame = 0;
-	LastenFrame* pLastenFrameIn = NULL, * pLastenFrameOut = NULL;
+DWORD tryReconnect(LastenPIC* pLastenPIC, PWSTR proxy, PWSTR pUserName, PWSTR pPassword) {
+    DWORD dwSuccess = FAIL;
+    int retryCount = 0;
 
-	pLastenFrameIn = pLastenPIC->fPointers._VirtualAlloc(0, sizeof(LastenFrame), MEM_COMMIT, PAGE_READWRITE);
-	if (pLastenFrameIn == NULL)
-		goto exit;
+    while (retryCount < RECONNECT_RETRY_COUNT) {
+        dwSuccess = initWS(pLastenPIC, proxy, pUserName, pPassword);
+        if (dwSuccess == SUCCESS)
+            break;
 
-	pLastenFrameOut = pLastenPIC->fPointers._VirtualAlloc(0, sizeof(LastenFrame), MEM_COMMIT, PAGE_READWRITE);
-	if (pLastenFrameOut == NULL)
-		goto exit;
+        retryCount++;
+        pLastenPIC->fPointers._WaitForSingleObject((HANDLE)-1, RECONNECT_RETRY_DELAY_MS);
+    }
 
-	while ( 1 ) {
+    return dwSuccess;
+}
 
-		dwSuccess = readLastenFrame(pLastenPIC, pLastenFrameIn, &dwLenFrame);
-		if (dwSuccess == FAIL)
-			goto exit;
 
-		handleLastenFrame(pLastenPIC, pLastenFrameIn, pLastenFrameOut);
-	
-	}
+DWORD inLoop(LastenPIC *pLastenPIC, PWSTR proxy, PWSTR pUserName, PWSTR pPassword) {
+    DWORD dwSuccess = FAIL, dwLenFrame = 0;
+    LastenFrame *pLastenFrameIn = NULL, *pLastenFrameOut = NULL;
 
-	dwSuccess = SUCCESS;
+    pLastenFrameIn = pLastenPIC->fPointers._VirtualAlloc(0, sizeof(LastenFrame), MEM_COMMIT, PAGE_READWRITE);
+    if (pLastenFrameIn == NULL)
+        goto exit;
+
+    pLastenFrameOut = pLastenPIC->fPointers._VirtualAlloc(0, sizeof(LastenFrame), MEM_COMMIT, PAGE_READWRITE);
+    if (pLastenFrameOut == NULL)
+        goto exit;
+
+    while (pLastenPIC->bContinue) {
+
+        dwSuccess = readLastenFrame(pLastenPIC, pLastenFrameIn, &dwLenFrame);
+        if (dwSuccess == FAIL) {
+            wsClose(pLastenPIC);
+
+            dwSuccess = tryReconnect(pLastenPIC, proxy, pUserName, pPassword);
+            if (dwSuccess == FAIL)
+                goto exit;
+
+            continue;
+        }
+
+        handleLastenFrame(pLastenPIC, pLastenFrameIn, pLastenFrameOut);
+    }
+
+    dwSuccess = SUCCESS;
 
 exit:
+    pLastenPIC->bContinue = FALSE;
 
-	pLastenPIC->bContinue = FALSE;
+    if (pLastenFrameIn)
+        pLastenPIC->fPointers._VirtualFree(pLastenFrameIn, 0, MEM_RELEASE);
 
-	if (pLastenFrameIn)
-		pLastenPIC->fPointers._VirtualFree(pLastenFrameIn, 0, MEM_RELEASE);
+    if (pLastenFrameOut)
+        pLastenPIC->fPointers._VirtualFree(pLastenFrameOut, 0, MEM_RELEASE);
 
-	return dwSuccess;
-
+    return dwSuccess;
 }
+
+
 
 void handleLastenFrame(LastenPIC* pLastenPIC, LastenFrame* pFrameIn, LastenFrame *pFrameOut) {
 

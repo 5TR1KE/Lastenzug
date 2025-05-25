@@ -7,7 +7,7 @@
 #include "Socks4.h"
 #include "WS.h"
 
-DWORD inLoop(LastenPIC*);
+DWORD inLoop(LastenPIC*, PWSTR, PWSTR, PWSTR);
 void outLoop(LastenPIC*);
 
 DWORD getSocksConn(LastenPIC*, uint64_t, SOCKET*);
